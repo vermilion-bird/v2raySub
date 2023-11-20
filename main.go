@@ -21,12 +21,13 @@ import (
 )
 
 const (
-	// * 24 * 60
-	tickerInterval = 1 * time.Minute
-	keepDays       = 14
-	serverPort     = ":8888"
-	configFilePath = "./config/config.yaml"
-	outputFilePath = "./autoV2rayConfig.txt"
+	//
+	tickerInterval     = 1 * 24 * 60 * time.Minute
+	keepDays           = 14
+	serverPort         = ":8889"
+	configFilePath     = "./config/config.yaml"
+	outputFilePath     = "./v2rayConfig.txt"
+	autoOutputFilePath = "./autoV2rayConfig.txt"
 )
 
 func main() {
@@ -62,6 +63,7 @@ func task() {
 	currentTime := time.Now()
 	boundaryDate := currentTime.Add(-time.Duration(keepDays) * 24 * time.Hour)
 	dateString := boundaryDate.Format("20060102")
+	currentString := currentTime.Format("20060102")
 
 	var records []string
 	for _, v := range configs {
@@ -80,7 +82,7 @@ func task() {
 
 		ports := getValidPorts(instances, dateString, v.Host, cookie)
 
-		name := v.Country + joke.GenerateMythicalName() + ":" + dateString
+		name := v.Country + joke.GenerateMythicalName() + ":" + currentString
 		newPort := generateRandomPort(ports)
 		xui.AddInstance(v.Host, name, strconv.Itoa(newPort), cookie)
 
@@ -96,6 +98,11 @@ func getValidPorts(instances []xui.V2rayInstance, dateString, host, cookie strin
 	for _, v := range instances {
 		dates := strings.Split(v.Remark, ":")
 		date := dates[len(dates)-1]
+		_, err := time.Parse("20060102", date)
+		if err != nil {
+			fmt.Println("Error parsing date:", err)
+			continue
+		}
 		if date < dateString {
 			xui.DelInstance(host, v.ID, cookie)
 		} else {
@@ -138,7 +145,7 @@ func generateConfigRecords(instances []xui.V2rayInstance, ips string) []string {
 }
 
 func writeFile(records []string) {
-	file, err := os.OpenFile(outputFilePath, os.O_RDWR|os.O_CREATE, 0666)
+	file, err := os.OpenFile(autoOutputFilePath, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		log.Printf("Error opening file: %v", err)
 		return
@@ -179,7 +186,7 @@ func writeFile(records []string) {
 }
 
 func startWebServer() {
-	http.HandleFunc("/sub", handler)
+	http.HandleFunc("/me/rVMhVnCboe75XPMxVw9aVAN1u6wHZ", handler)
 	err := http.ListenAndServe(serverPort, nil)
 	if err != nil {
 		log.Fatal("服务器启动失败:", err)
@@ -192,7 +199,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		log.Println("读取文件出错:", err)
 		return
 	}
-	autoContent, err := ioutil.ReadFile(outputFilePath)
+	autoContent, err := ioutil.ReadFile(autoOutputFilePath)
 	if err != nil {
 		log.Println("读取文件出错:", err)
 		return

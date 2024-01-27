@@ -22,8 +22,9 @@ import (
 
 const (
 	//
-	tickerInterval     = 1 * 24 * 60 * time.Minute
-	keepDays           = 14
+	tickerInterval = 1 * 24 * 60 * time.Minute
+	// 60 * time.Second
+	keepDays           = 7
 	serverPort         = ":8889"
 	configFilePath     = "./config/config.yaml"
 	outputFilePath     = "./v2rayConfig.txt"
@@ -51,6 +52,21 @@ func scheduleTask() {
 	// Add a WaitGroup to wait for goroutines to finish
 	wg.Add(1)
 	wg.Wait()
+}
+
+func reverseStringSlice(slice []string) []string {
+	// Get the length of the slice
+	length := len(slice)
+
+	// Create a new slice to store the reversed elements
+	reversedSlice := make([]string, length)
+
+	// Iterate over the original slice in reverse order and populate the new slice
+	for i, value := range slice {
+		reversedSlice[length-1-i] = value
+	}
+
+	return reversedSlice
 }
 
 func task() {
@@ -89,7 +105,7 @@ func task() {
 		instancesWrite, _ := xui.ListInstance(v.Host, cookie)
 		records = append(records, generateConfigRecords(instancesWrite, ips)...)
 	}
-
+	records = reverseStringSlice(records)
 	writeFile(records)
 }
 

@@ -1,0 +1,19 @@
+# v2raySub 部署配置文件
+# 复制此文件为 deploy.conf 并修改配置
+
+# 远程服务器配置
+REMOTE_USER="ubuntu"
+REMOTE_HOST="192.0.2.1"
+REMOTE_PORT="22"
+REMOTE_PATH="/home/ubuntu/v2raySub"
+
+# 服务配置
+SERVICE_PORT="8888"
+PROCESS_NAME="v2raySub"
+
+# 备份配置
+KEEP_BACKUPS=3  # 保留最近几个备份
+
+# Go 环境配置（如果 go 不在 PATH 中）
+# export GOROOT=$HOME/go
+# export PATH=$GOROOT/bin:$PATH

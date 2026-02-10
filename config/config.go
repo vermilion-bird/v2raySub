@@ -30,7 +30,7 @@ func LoadConfigs(filePath string) ([]V2rayInstance, error) {
 
 	for _, v := range configs {
 		log.Printf("User: %s\n", v.User)
-		log.Printf("Passwd: %s\n", v.Passwd)
+		// 不记录密码，避免泄露到日志
 	}
 
 	return configs, nil

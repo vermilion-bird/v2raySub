@@ -1,0 +1,20 @@
+# Clash 手动配置文件示例
+# 这个文件可以用来添加手动维护的节点
+# 格式如下：
+
+proxies: []
+
+# 示例配置（取消注释并修改以使用）:
+# proxies:
+#   - name: 手动节点1
+#     type: vmess
+#     server: 1.2.3.4
+#     port: 443
+#     uuid: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+#     alterId: 0
+#     cipher: auto
+#     tls: true
+#     network: ws
+#     ws-path: /path
+#     ws-headers:
+#       Host: example.com

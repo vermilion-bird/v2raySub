@@ -18,17 +18,21 @@ import (
 	"v2raysub/config"
 	"v2raysub/joke"
 	"v2raysub/xui"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	//
 	tickerInterval = 1 * 24 * 60 * time.Minute
 	// 60 * time.Second
-	keepDays           = 7
-	serverPort         = ":8889"
-	configFilePath     = "./config/config.yaml"
-	outputFilePath     = "./v2rayConfig.txt"
-	autoOutputFilePath = "./autoV2rayConfig.txt"
+	keepDays               = 7
+	serverPort             = ":8889"
+	configFilePath         = "./config/config.yaml"
+	outputFilePath         = "./v2rayConfig.txt"
+	autoOutputFilePath     = "./autoV2rayConfig.txt"
+	clashOutputFilePath    = "./clashConfig.yaml"
+	autoClashOutputFilePath = "./autoClashConfig.yaml"
 )
 
 func main() {
@@ -107,6 +111,9 @@ func task() {
 	}
 	records = reverseStringSlice(records)
 	writeFile(records)
+	
+	// Generate Clash configs
+	generateAndWriteClashConfigs(configs)
 }
 
 func getValidPorts(instances []xui.V2rayInstance, dateString, host, cookie string) []int {
@@ -202,11 +209,13 @@ func writeFile(records []string) {
 }
 
 func startWebServer() {
-	http.HandleFunc("/me/rVMhVnCboe75XPMxVw9aVAN1u6wHZ", handler)
+	http.HandleFunc("/me/ZzooG**oyqYVdrx", handler)
+	http.HandleFunc("/me/ZzooGdW**qYVdrx/clash", clashHandler)
 	err := http.ListenAndServe(serverPort, nil)
 	if err != nil {
 		log.Fatal("服务器启动失败:", err)
 	}
+	
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -226,6 +235,61 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprint(w, encoded)
 }
+
+func clashHandler(w http.ResponseWriter, r *http.Request) {
+	// Set response header to indicate YAML content
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	
+	// Merge both Clash configs
+	var config1 ClashConfig
+	var config2 ClashConfig
+	
+	// Read manual config file (optional)
+	content, err := ioutil.ReadFile(clashOutputFilePath)
+	if err != nil {
+		log.Println("手动 Clash 配置文件不存在，跳过:", err)
+	} else if len(content) > 0 {
+		err = yaml.Unmarshal(content, &config1)
+		if err != nil {
+			log.Println("解析 Clash 配置出错:", err)
+		}
+	}
+	
+	// Read auto-generated config file (optional)
+	autoContent, err := ioutil.ReadFile(autoClashOutputFilePath)
+	if err != nil {
+		log.Println("自动 Clash 配置文件不存在，跳过:", err)
+	} else if len(autoContent) > 0 {
+		err = yaml.Unmarshal(autoContent, &config2)
+		if err != nil {
+			log.Println("解析自动 Clash 配置出错:", err)
+		}
+	}
+
+	// Merge proxies
+	mergedConfig := ClashConfig{
+		Proxies: append(config1.Proxies, config2.Proxies...),
+	}
+
+	// If no proxies available, return empty config with message
+	if len(mergedConfig.Proxies) == 0 {
+		log.Println("警告: 没有可用的 Clash 代理配置")
+		mergedConfig = ClashConfig{
+			Proxies: []ClashProxy{},
+		}
+	}
+
+	// Marshal to YAML
+	yamlData, err := yaml.Marshal(mergedConfig)
+	if err != nil {
+		log.Println("生成 YAML 出错:", err)
+		http.Error(w, "Failed to generate clash config", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprint(w, string(yamlData))
+}
+
 func isInSlice(target int, slice []int) bool {
 	for _, value := range slice {
 		if value == target {
@@ -249,6 +313,26 @@ type VPNConfig struct {
 	TLS  string `json:"tls"`
 }
 
+// ClashProxy represents a Clash proxy configuration
+type ClashProxy struct {
+	Name     string            `yaml:"name"`
+	Type     string            `yaml:"type"`
+	Server   string            `yaml:"server"`
+	Port     int               `yaml:"port"`
+	UUID     string            `yaml:"uuid"`
+	AlterID  int               `yaml:"alterId"`
+	Cipher   string            `yaml:"cipher"`
+	TLS      bool              `yaml:"tls,omitempty"`
+	Network  string            `yaml:"network,omitempty"`
+	WSPath   string            `yaml:"ws-path,omitempty"`
+	WSHeaders map[string]string `yaml:"ws-headers,omitempty"`
+}
+
+// ClashConfig represents a complete Clash configuration
+type ClashConfig struct {
+	Proxies []ClashProxy `yaml:"proxies"`
+}
+
 func extractIP(input string) []string {
 	// 定义IPv4和IPv6正则表达式
 	ipv4Pattern := `(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})`
@@ -266,6 +350,139 @@ func extractIP(input string) []string {
 	matches := append(ipv4Matches, ipv6Matches...)
 
 	return matches
+}
+
+// generateClashProxies converts V2Ray instances to Clash proxy format
+func generateClashProxies(instances []xui.V2rayInstance, ips string) []ClashProxy {
+	var proxies []ClashProxy
+	nameCount := make(map[string]int)
+	
+	for _, v := range instances {
+		// Generate unique name by checking for duplicates
+		baseName := v.Remark
+		uniqueName := baseName
+		
+		// If name already exists, append a counter
+		if count, exists := nameCount[baseName]; exists {
+			nameCount[baseName] = count + 1
+			uniqueName = fmt.Sprintf("%s-%d", baseName, count+1)
+		} else {
+			nameCount[baseName] = 1
+		}
+		
+		proxy := ClashProxy{
+			Name:    uniqueName,
+			Type:    "vmess",
+			Server:  ips,
+			Port:    v.Port,
+			UUID:    "c3700e59-b55b-4db7-c836-c7c9b4c7d607",
+			AlterID: 0,
+			Cipher:  "auto",
+			TLS:     false,
+			Network: "ws",
+			WSPath:  "/",
+			WSHeaders: map[string]string{
+				"Host": ips,
+			},
+		}
+		proxies = append(proxies, proxy)
+	}
+	return proxies
+}
+
+// ensureUniqueProxyNames ensures all proxy names are globally unique
+func ensureUniqueProxyNames(proxies []ClashProxy) []ClashProxy {
+	nameCount := make(map[string]int)
+	result := make([]ClashProxy, 0, len(proxies))
+	
+	for _, proxy := range proxies {
+		baseName := proxy.Name
+		uniqueName := baseName
+		
+		// Check if name already exists
+		if count, exists := nameCount[baseName]; exists {
+			nameCount[baseName] = count + 1
+			// Append counter to make it unique
+			uniqueName = fmt.Sprintf("%s-%d", baseName, count+1)
+		} else {
+			nameCount[baseName] = 1
+		}
+		
+		// Create new proxy with unique name
+		proxy.Name = uniqueName
+		result = append(result, proxy)
+	}
+	
+	return result
+}
+
+// generateAndWriteClashConfigs generates Clash format configs and writes to file
+func generateAndWriteClashConfigs(configs []config.V2rayInstance) {
+	currentTime := time.Now()
+	boundaryDate := currentTime.Add(-time.Duration(keepDays) * 24 * time.Hour)
+	dateString := boundaryDate.Format("20060102")
+
+	var allProxies []ClashProxy
+	
+	for _, v := range configs {
+		ips := extractIP(v.Host)[0]
+		cookie, err := xui.Login(v.Host, v.User, v.Passwd)
+		if err != nil {
+			log.Printf("Error logging in to %s: %v", v.Host, err)
+			continue
+		}
+
+		instances, err := xui.ListInstance(v.Host, cookie)
+		if err != nil {
+			log.Printf("Error listing instances for %s: %v", v.Host, err)
+			continue
+		}
+
+		// Filter valid instances
+		var validInstances []xui.V2rayInstance
+		for _, inst := range instances {
+			dates := strings.Split(inst.Remark, ":")
+			date := dates[len(dates)-1]
+			_, err := time.Parse("20060102", date)
+			if err == nil && date >= dateString {
+				validInstances = append(validInstances, inst)
+			}
+		}
+
+		proxies := generateClashProxies(validInstances, ips)
+		allProxies = append(allProxies, proxies...)
+	}
+
+	// Ensure all proxy names are unique globally
+	allProxies = ensureUniqueProxyNames(allProxies)
+
+	// Reverse the order to match the original behavior
+	for i, j := 0, len(allProxies)-1; i < j; i, j = i+1, j-1 {
+		allProxies[i], allProxies[j] = allProxies[j], allProxies[i]
+	}
+
+	clashConfig := ClashConfig{
+		Proxies: allProxies,
+	}
+
+	writeClashFile(clashConfig, autoClashOutputFilePath)
+}
+
+// writeClashFile writes Clash config to YAML file
+func writeClashFile(config ClashConfig, filepath string) {
+	yamlData, err := yaml.Marshal(config)
+	if err != nil {
+		log.Printf("Error marshalling Clash config to YAML: %v", err)
+		return
+	}
+
+	err = ioutil.WriteFile(filepath, yamlData, 0666)
+	if err != nil {
+		log.Printf("Error writing Clash config file: %v", err)
+		return
+	}
+
+	log.Printf("Clash config file written successfully: %s", filepath)
 }
 
 // isInSlice and extractIP functions remain unchanged...
